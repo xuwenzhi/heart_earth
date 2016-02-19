@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1">
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no">
+        <title>热力图</title>
+        <script src="js/Cesium/Cesium/Cesium.js"></script>
+        <style>
+            @import url('js/Cesium/Cesium/Widgets/widgets.css');
+            html, body, #cesiumContainer {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
+            }
+            #loading{
+              font-size:30px;
+              width: 500px; height: 150px;
+              position: absolute;
+              left: 50%; 
+              top: 50%;
+              transform:translate(-50%,-50%);
+              text-align:center;
+              line-height: 220px;
+          }
+        </style>
+    </head>
+    <body>
+        <div id="cesiumContainer"></div>
+        <div id="loading">LOADING...</div>
+        <script src="js/Cesium/cartodb3.11-core.js"></script>
+        <script src="js/Cesium/cesium-cartodb.min.js"></script>
+        <script>
+            function clone(obj){  
+                var o, obj;  
+                if (obj.constructor == Object){  
+                    o = new obj.constructor();   
+                }else{  
+                    o = new obj.constructor(obj.valueOf());   
+                }  
+                for(var key in obj){  
+                    if ( o[key] != obj[key] ){   
+                        if ( typeof(obj[key]) == 'object' ){   
+                            o[key] = clone(obj[key]);  
+                        }else{  
+                            o[key] = obj[key];  
+                        }  
+                    }  
+                }  
+                o.toString = obj.toString;  
+                o.valueOf = obj.valueOf;  
+                return o;  
+            } 
+
+            //Basemap
+            var basemapProvider = new Cesium.CartoDBImageryProvider({
+                url: 'http://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+                credit: 'Basemap courtesy of CartoDB'
+            });
+
+            var viewer = new Cesium.Viewer('cesiumContainer', {
+                imageryProvider: basemapProvider,
+                baseLayerPicker: false,
+                fullscreenButton: true,
+                homeButton: false,
+                timeline: false,
+                navigationHelpButton: false,
+                animation: false,
+                scene3DOnly: false,
+                geocoder: false
+            });
+// viewer.camera.flyTo({
+//       destination : Cesium.Cartesian3.fromDegrees(117.16, 32.71, 65000.0),
+//       duration : 1.0
+//     }); 
+            var ellipsoid = Cesium.Ellipsoid.WGS84;
+            var west = Cesium.Math.toRadians(65.0);
+            var south = Cesium.Math.toRadians(-20.0);
+            var east = Cesium.Math.toRadians(200.0);
+            var north = Cesium.Math.toRadians(50.0);
+            var extent = new Cesium.Rectangle(west, south, east, north);
+            viewer.scene.camera.viewRectangle(extent, ellipsoid);
+            
+            var scene = viewer.scene;
+            var circleInstance = null;
+            var primitive = null;
+            var tmpColor = null;
+            var tmpRadius = null;
+            var xhr;
+            var bigColorSize = new Cesium.Color(1.0, 0.1, 0.0, 0.4);
+            var mediumColorSize = new Cesium.Color(1.0, 0.2, 0.0, 0.4);
+            var smallColorSize = new Cesium.Color(1.0, 0.28, 0.0, 0.4);
+            var vertexFormatConstance = Cesium.PerInstanceColorAppearance.VERTEX_FORMAT;
+            var primitive_appearance = new Cesium.PerInstanceColorAppearance({
+                                    translucent : true,
+                                    closed : true
+                                });
+            xhr = new XMLHttpRequest();
+            //xhr.open('GET', '/Analyse/index/getheatdata', true);
+            xhr.open('GET', 'data.json', true);
+            xhr.onreadystatechange = function(e) {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        var geometryInstance = new Cesium.GeometryInstance({
+                            geometry : new Cesium.CircleGeometry({
+                                center : Cesium.Cartesian3.fromDegrees(116.0000, 39.0000),
+                                radius : 25000,
+                                vertexFormat : Cesium.PerInstanceColorAppearance.VERTEX_FORMAT
+                            }),
+                            attributes : {
+                                color : Cesium.ColorGeometryInstanceAttribute.fromColor(smallColorSize)
+                            },
+                            id: 'circle'
+                        });
+                        var data = JSON.parse(xhr.responseText);
+                        for(i = 0; i < data.length; i++){
+                            if(data[i]['size'] > 20){
+                                tmpColor = bigColorSize;
+                                tmpRadius = 45000.0;
+                            }else if(data[i] > 5){
+                                tmpColor = mediumColorSize;
+                                tmpRadius = 45000.0;
+                            }else{
+                                tmpColor = smallColorSize;
+                                tmpRadius = 45000.0;
+                            }
+                            var tmp = clone(geometryInstance);
+                            tmp.geometry = new Cesium.CircleGeometry({
+                                    center : Cesium.Cartesian3.fromDegrees(data[i]['lng'], data[i]['lat']),
+                                    radius : tmpRadius,
+                                    vertexFormat : vertexFormatConstance
+                                });
+                            tmp.attributes.color = Cesium.ColorGeometryInstanceAttribute.fromColor(tmpColor);
+                            primitive = new Cesium.Primitive({
+                                geometryInstances : tmp,
+                                appearance : primitive_appearance
+                            });
+                            scene.primitives.add(primitive);
+                        }
+                        document.getElementById('loading').style.display = "none";
+                    }
+                }
+            };
+            xhr.send(null);
+        </script>
+    </body>
+</html>
